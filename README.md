@@ -177,8 +177,8 @@ The AI uses a minimax search tree to evaluate positions:
 ## Author
 
 **Zain Aftab**
-- GitHub: [Add your GitHub link]
-- Email: [Add your email]
+- GitHub: https://github.com/ZainAftab-dev
+- Email: zainaftab589@gmail.com
 
 ## License
 
