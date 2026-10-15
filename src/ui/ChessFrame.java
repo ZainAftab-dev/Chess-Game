@@ -1,183 +1,107 @@
 package ui;
 
-import game.ChessGame;
 import ai.AIPlayer;
+import game.ChessGame;
 import game.ChessGame.Move;
 import javax.swing.*;
 import java.awt.*;
 
 /**
- * Main game window with GUI and game loop integration.
+ * Main window: the board on the left, the side panel on the right, and the loop that lets the AI reply.
  */
 public class ChessFrame extends JFrame {
-    private GamePanel gamePanel;
-    private ChessGame game;
-    private AIPlayer aiPlayer;
-    private JLabel statusLabel;
-    private JButton resetButton;
-    private Thread aiThread;
-    private boolean aiThinking = false;
-    private JLabel moveCountLabel;
-    private JLabel capturesLabel;
-    private JComboBox<AIPlayer.Difficulty> difficultyCombo;
+    private final ChessGame game;
+    private final AIPlayer aiPlayer;
+    private final GamePanel gamePanel;
+    private final SidePanel sidePanel;
+    private volatile boolean aiThinking = false;
+    private volatile int generation = 0;
 
     public ChessFrame() {
-        setTitle("Chess Game - AI Opponent");
+        setTitle("Chess · Play against the computer");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setResizable(false);
-        setLocationRelativeTo(null);
 
         game = new ChessGame();
         aiPlayer = new AIPlayer(game, AIPlayer.Difficulty.HARD);
         gamePanel = new GamePanel(game);
+        sidePanel = new SidePanel(game, AIPlayer.Difficulty.HARD, aiPlayer::setDifficulty, this::resetGame);
+        gamePanel.setOnMove(this::refresh);
 
-        // Create top panel with difficulty selector
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
-        topPanel.setBackground(new Color(50, 50, 50));
-        
-        JLabel diffLabel = new JLabel("Difficulty:");
-        diffLabel.setForeground(new Color(200, 200, 200));
-        topPanel.add(diffLabel);
-        
-        difficultyCombo = new JComboBox<>(AIPlayer.Difficulty.values());
-        difficultyCombo.setSelectedItem(AIPlayer.Difficulty.HARD);
-        difficultyCombo.addActionListener(e -> {
-            AIPlayer.Difficulty selected = (AIPlayer.Difficulty) difficultyCombo.getSelectedItem();
-            aiPlayer.setDifficulty(selected);
-        });
-        topPanel.add(difficultyCombo);
+        JPanel root = new JPanel(new BorderLayout());
+        root.setBackground(Theme.BG);
+        root.add(gamePanel, BorderLayout.CENTER);
+        root.add(sidePanel, BorderLayout.EAST);
+        setContentPane(root);
 
-        // Create bottom panel with status and reset button
-        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
-        bottomPanel.setBackground(new Color(50, 50, 50));
+        getRootPane().registerKeyboardAction(e -> resetGame(),
+                KeyStroke.getKeyStroke("control N"), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
-        statusLabel = new JLabel("White's Turn");
-        statusLabel.setForeground(new Color(200, 200, 200));
-        statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        bottomPanel.add(statusLabel);
-        
-        moveCountLabel = new JLabel("Moves: 0");
-        moveCountLabel.setForeground(new Color(150, 150, 150));
-        moveCountLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        bottomPanel.add(moveCountLabel);
-        
-        capturesLabel = new JLabel("Captured: W(0) B(0)");
-        capturesLabel.setForeground(new Color(150, 150, 150));
-        capturesLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        bottomPanel.add(capturesLabel);
-
-        resetButton = new JButton("Reset Game");
-        resetButton.setBackground(new Color(76, 110, 66));
-        resetButton.setForeground(Color.WHITE);
-        resetButton.setFocusPainted(false);
-        resetButton.addActionListener(e -> resetGame());
-        bottomPanel.add(resetButton);
-
-        // Main panel
-        JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBackground(new Color(50, 50, 50));
-        mainPanel.add(topPanel, BorderLayout.NORTH);
-        mainPanel.add(gamePanel, BorderLayout.CENTER);
-        mainPanel.add(bottomPanel, BorderLayout.SOUTH);
-
-        add(mainPanel);
-        setSize(640, 720);
+        pack();
+        setMinimumSize(new Dimension(860, 600));
         setLocationRelativeTo(null);
+        refresh();
     }
 
-    /**
-     * Start the game and game loop.
-     */
+    /** Show the window and start the loop that triggers the AI. */
     public void startGame() {
         setVisible(true);
-        Thread gameThread = new Thread(this::gameLoop);
-        gameThread.setDaemon(true);
-        gameThread.start();
+        gamePanel.requestFocusInWindow();
+        Thread loop = new Thread(this::gameLoop, "game-loop");
+        loop.setDaemon(true);
+        loop.start();
     }
 
-    /**
-     * Main game loop: handles AI moves and game state updates.
-     */
+    private boolean gameOver() {
+        ChessGame.GameState st = game.getGameState();
+        return st == ChessGame.GameState.WHITE_CHECKMATE || st == ChessGame.GameState.BLACK_CHECKMATE || st == ChessGame.GameState.STALEMATE;
+    }
+
     private void gameLoop() {
         while (true) {
             try {
                 Thread.sleep(100);
-
-                // If it's Black's turn and AI is not already thinking, make AI move
-                if (!game.isWhiteTurn() && !aiThinking) {
-                    aiThinking = true;
-                    aiThread = new Thread(() -> {
-                        SwingUtilities.invokeLater(() -> {
-                            statusLabel.setText("AI is Thinking... (" + aiPlayer.getDifficulty() + ")");
-                            gamePanel.repaint();
-                        });
-                        
-                        Move aiMove = aiPlayer.findBestMove();
-                        if (aiMove != null) {
-                            game.movePiece(aiMove.fromX, aiMove.fromY, aiMove.toX, aiMove.toY);
-                        }
-                        
-                        aiThinking = false;
-                        SwingUtilities.invokeLater(() -> {
-                            updateStatus();
-                            gamePanel.repaint();
-                        });
-                    });
-                    aiThread.setDaemon(true);
-                    aiThread.start();
-                } else if (game.isWhiteTurn() && !aiThinking) {
-                    SwingUtilities.invokeLater(this::updateStatus);
-                }
-
-                SwingUtilities.invokeLater(() -> gamePanel.repaint());
-
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                break;
+                return;
+            }
+            if (!game.isWhiteTurn() && !aiThinking && !gameOver()) {
+                aiThinking = true;
+                final int startedIn = generation;
+                SwingUtilities.invokeLater(this::refresh);
+                Thread ai = new Thread(() -> {
+                    try {
+                        Thread.sleep(250); // let the player see their own move land first
+                        Move move = aiPlayer.findBestMove();
+                        if (move != null && startedIn == generation) {
+                            game.movePiece(move.fromX, move.fromY, move.toX, move.toY);
+                        }
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        aiThinking = false;
+                        SwingUtilities.invokeLater(this::refresh);
+                    }
+                }, "ai");
+                ai.setDaemon(true);
+                ai.start();
             }
         }
     }
 
-    private void updateStatus() {
-        ChessGame.GameState state = game.getGameState();
-        
-        switch (state) {
-            case PLAYING:
-                statusLabel.setText(game.isWhiteTurn() ? "White's Turn" : "Black's Turn (AI)");
-                break;
-            case WHITE_CHECK:
-                statusLabel.setText("White in Check! Your Turn");
-                break;
-            case BLACK_CHECK:
-                statusLabel.setText("Black in Check!");
-                break;
-            case WHITE_CHECKMATE:
-                statusLabel.setText("Black Wins! (White Checkmate)");
-                break;
-            case BLACK_CHECKMATE:
-                statusLabel.setText("White Wins! (Black Checkmate)");
-                break;
-            case STALEMATE:
-                statusLabel.setText("Stalemate - Draw!");
-                break;
-        }
-        
-        moveCountLabel.setText("Moves: " + game.getMoveCount());
-        capturesLabel.setText("Captured: W(" + game.getCapturedWhitePieces() + ") B(" + game.getCapturedBlackPieces() + ")");
-    }
-
-    private void resetGame() {
-        game.reset();
-        gamePanel.clearSelection();
-        aiThinking = false;
-        updateStatus();
+    private void refresh() {
+        sidePanel.refresh(aiThinking);
         gamePanel.repaint();
     }
 
+    private void resetGame() {
+        generation++;
+        game.reset();
+        gamePanel.clearSelection();
+        refresh();
+    }
+
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            ChessFrame frame = new ChessFrame();
-            frame.startGame();
-        });
+        System.setProperty("awt.useSystemAAFontSettings", "on");
+        SwingUtilities.invokeLater(() -> new ChessFrame().startGame());
     }
 }

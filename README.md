@@ -9,7 +9,7 @@ A desktop chess game in pure Java Swing where you play White against a computer 
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-<img src="docs/screenshot.png" alt="Chess game screenshot" width="520"/>
+<img src="docs/screenshot.png" alt="Chess board in the walnut theme with a knight selected and its legal moves marked, next to the side panel with status, strength, captured pieces and move list" width="760"/>
 
 </div>
 
@@ -30,10 +30,12 @@ A desktop chess game in pure Java Swing where you play White against a computer 
 - 3-second search time limit per move, so the game never freezes
 
 **Interface**
-- Cream and forest-green board with anti-aliased Unicode pieces
-- Highlights for the selected piece's legal moves and for the last move
-- Live status bar: whose turn, check / checkmate / stalemate, move count and captured pieces
-- Reset button to start a new game
+- Walnut-and-ivory board with ivory and ebony pieces, each outlined so they stand out on light and dark squares
+- File and rank labels (a–h, 1–8) on the board edge
+- Click a piece to see its moves: dots for empty squares, rings for captures; the last move is tinted and a king in check glows red
+- Side panel with a status line (your move, computer thinking, check), a four-step **Computer strength** control, captured pieces with the material lead, and a numbered **move list** (e2 – e4, captures shown with ×)
+- Checkmate and stalemate appear as a card over the board
+- **New game** button (or <kbd>Ctrl</kbd>+<kbd>N</kbd>); the window can be resized and the board scales with it
 - The AI thinks on a background thread, so the window stays responsive
 
 ## Difficulty levels
@@ -64,7 +66,7 @@ src/
 ├── board/    Board: 8x8 grid, move execution, en passant checks
 ├── game/     ChessGame: turns, rule enforcement, game state
 ├── ai/       AIPlayer: Minimax + Alpha-Beta, evaluation, move ordering
-└── ui/       ChessFrame (window, controls, game loop) and GamePanel (board drawing, mouse input)
+└── ui/       ChessFrame (window, game loop), GamePanel (board drawing, mouse input), SidePanel (status, strength, captures, moves), Theme (colours, fonts, buttons)
 ```
 
 Each piece class computes its own legal moves (polymorphism over the abstract `Piece`), so the board and game logic never need to know piece-specific rules.
@@ -98,7 +100,13 @@ Or open the folder in IntelliJ IDEA / Eclipse / VS Code and run `ui.ChessFrame`.
 1. You are White. Click one of your pieces to see its legal moves.
 2. Click a highlighted square to move.
 3. Black (the AI) replies automatically.
-4. Change the difficulty from the dropdown at any time, or press **Reset Game** to start over.
+4. Change the computer's strength at any time, or press **New game** to start over.
+
+## Fixes in the latest version
+
+- `Board.copy()` started from the opening position and only overwrote occupied squares, so test boards kept "ghost" pieces on squares that had since emptied. Check detection, legal-move filtering and the AI's search all used these copies. Copies now match the real board.
+- The game state was worked out before the turn passed to the other player, so checkmate and stalemate were never reported. It is now evaluated for the side that has to move.
+- You can no longer move Black's pieces while the computer is thinking, and pressing **New game** mid-search no longer lets the old search play a move on the new board.
 
 ## Known limitations
 

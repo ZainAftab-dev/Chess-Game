@@ -21,6 +21,8 @@ public class ChessGame {
     private List<Move> moveHistory;
     private int capturedWhitePieces;
     private int capturedBlackPieces;
+    private List<String> capturedWhiteSymbols;
+    private List<String> capturedBlackSymbols;
 
     public enum GameState {
         PLAYING, WHITE_CHECK, BLACK_CHECK, WHITE_CHECKMATE, BLACK_CHECKMATE, STALEMATE
@@ -31,9 +33,11 @@ public class ChessGame {
         isWhiteTurn = true;
         lastMove = null;
         gameState = GameState.PLAYING;
-        moveHistory = new ArrayList<>();
+        moveHistory = new java.util.concurrent.CopyOnWriteArrayList<>();
         capturedWhitePieces = 0;
         capturedBlackPieces = 0;
+        capturedWhiteSymbols = new java.util.concurrent.CopyOnWriteArrayList<>();
+        capturedBlackSymbols = new java.util.concurrent.CopyOnWriteArrayList<>();
     }
 
     /**
@@ -59,27 +63,26 @@ public class ChessGame {
         if (isKingInCheck(isWhiteTurn, testBoard)) return false;
 
         Piece capturedPiece = board.getPiece(toX, toY);
+        if (capturedPiece == null && piece instanceof Pawn && fromY != toY) {
+            // En passant capture
+            capturedPiece = board.getPiece(fromX, toY);
+        }
         if (capturedPiece != null) {
             if (capturedPiece.isWhite()) {
                 capturedWhitePieces++;
+                capturedWhiteSymbols.add(capturedPiece.getSymbol());
             } else {
                 capturedBlackPieces++;
-            }
-        } else if (piece instanceof Pawn && fromY != toY) {
-            // En passant capture
-            Piece enPassantPawn = board.getPiece(fromX, toY);
-            if (enPassantPawn != null) {
-                if (enPassantPawn.isWhite()) {
-                    capturedWhitePieces++;
-                } else {
-                    capturedBlackPieces++;
-                }
+                capturedBlackSymbols.add(capturedPiece.getSymbol());
             }
         }
         
         // Move is valid, execute it
+        String movedSymbol = piece.getSymbol();
         board.movePiece(fromX, fromY, toX, toY);
         lastMove = new Move(fromX, fromY, toX, toY);
+        lastMove.symbol = movedSymbol;
+        lastMove.capture = capturedPiece != null;
         moveHistory.add(lastMove);
         
         if (piece instanceof Pawn) {
@@ -89,8 +92,9 @@ public class ChessGame {
             }
         }
         
-        updateGameState();
+        // Hand the turn over first, so the state is evaluated for the side that must move next
         isWhiteTurn = !isWhiteTurn;
+        updateGameState();
 
         return true;
     }
@@ -183,9 +187,11 @@ public class ChessGame {
         isWhiteTurn = true;
         lastMove = null;
         gameState = GameState.PLAYING;
-        moveHistory = new ArrayList<>();
+        moveHistory = new java.util.concurrent.CopyOnWriteArrayList<>();
         capturedWhitePieces = 0;
         capturedBlackPieces = 0;
+        capturedWhiteSymbols = new java.util.concurrent.CopyOnWriteArrayList<>();
+        capturedBlackSymbols = new java.util.concurrent.CopyOnWriteArrayList<>();
     }
 
     // Getters
@@ -197,12 +203,19 @@ public class ChessGame {
     public int getCapturedWhitePieces() { return capturedWhitePieces; }
     public int getCapturedBlackPieces() { return capturedBlackPieces; }
     public int getMoveCount() { return moveHistory.size(); }
+    /** Symbols of the white pieces Black has captured, in order. */
+    public List<String> getCapturedWhiteSymbols() { return new ArrayList<>(capturedWhiteSymbols); }
+    /** Symbols of the black pieces White has captured, in order. */
+    public List<String> getCapturedBlackSymbols() { return new ArrayList<>(capturedBlackSymbols); }
 
     /**
      * Inner class to represent a chess move.
      */
     public static class Move {
         public int fromX, fromY, toX, toY;
+        /** Symbol of the piece that moved and whether it captured (set for played moves only). */
+        public String symbol;
+        public boolean capture;
 
         public Move(int fromX, int fromY, int toX, int toY) {
             this.fromX = fromX;

@@ -141,11 +141,8 @@ public class Board {
         
         for (int i = 0; i < SIZE; i++) {
             for (int j = 0; j < SIZE; j++) {
-                if (grid[i][j] != null) {
-                    Piece original = grid[i][j];
-                    Piece copy = copyPiece(original);
-                    newBoard.grid[i][j] = copy;
-                }
+                // new Board() starts from the opening position, so every square must be overwritten
+                newBoard.grid[i][j] = grid[i][j] == null ? null : copyPiece(grid[i][j]);
             }
         }
         return newBoard;
